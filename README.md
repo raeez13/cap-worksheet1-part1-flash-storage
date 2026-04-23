@@ -705,7 +705,50 @@ Expected behaviour:
 | second read | prints metadata and `Payload: Second write` |
 | huge sector write/read | prints `Error: sector number out of range (999999). Valid range is 0..<last_sector>` |
 
-## 9) Key Files
+## 9) Demo Video
+
+The demo recording is included in this repo:
+
+- [worksheet1-part1-demo.mov](demo/worksheet1-part1-demo.mov)
+
+What the demo is showing, in repo terms:
+
+1. The Pico is flashed with `build/cap_template.uf2`.
+   At that point the `cap_template` firmware becomes the program that runs after reset.
+
+2. The board exposes the CLI over USB serial.
+   This comes from `pico_enable_stdio_usb(cap_template 1)` and the command loop in `main.c`.
+
+3. A sector number typed by the user is converted into a byte offset.
+   The CLI does this with `sector_number * FLASH_SECTOR_SIZE`.
+
+4. The flash layer adds `FLASH_TARGET_OFFSET`.
+   This moves the operation away from the application image and into the reserved user-data region.
+
+5. If the demo shows `FLASH_ERASE 0`, one flash sector is erased.
+   That clears the structured record stored in sector `0`.
+   After that, `FLASH_READ 0` reports the sector as empty or uninitialized because the `magic` and `version` fields are no longer valid.
+
+6. If the demo shows `FLASH_WRITE 0 "Hello World"`, the CLI builds a `flash_record_t` in RAM.
+   It fills in `magic`, `version`, `write_count`, and `data_len`, then copies `"Hello World"` into `payload`.
+
+7. The low-level write does not program only those 11 bytes.
+   It reads the whole sector into RAM, patches the new record into that RAM buffer, disables interrupts, erases the sector, and writes the sector back page by page.
+
+8. If the demo then shows `FLASH_READ 0`, the code reads one whole sector into `cli_read_record`.
+   It validates the record using `magic`, `version`, and `data_len`.
+   Then it prints `write_count`, `data_len`, and the payload bytes.
+
+9. If the demo shows a second write to the same sector, `write_count` increases.
+   That happens because the code first reads the existing record and only starts back at `1` when the old record is invalid.
+
+10. If the demo shows an invalid sector number, the command is rejected in the CLI layer before flash access happens.
+    That is why the error appears immediately.
+
+The important technical point is that the demo is not writing plain text directly into flash.
+It is writing a full sector-sized structured record, and the visible CLI output is the user-facing result of that lower-level flash logic.
+
+## 10) Key Files
 
 | File | Contents |
 |---|---|
